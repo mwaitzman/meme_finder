@@ -1,0 +1,14 @@
+[package]
+edition = "2021"
+name = "meme_finder"
+version = "0.1.0"
+
+[dependencies]
+leptess = "0.13.2"
+rayon = "1.5.1"
+# clap = "3.1.8"
+walkdir = "2.3.2"
+infer = "0.7.0"
+
+[profile.release]
+lto = true
