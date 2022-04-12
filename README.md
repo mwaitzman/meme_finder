@@ -4,7 +4,7 @@ you have a folder with a bunch (possibly hundreds or even thousands) of memes. Y
 ### Usage:
     run with `<binary name> <path to image directory> <exact text to search for (case-insensitive)> `to iterate through the directory, finding all image(s) containing that text, and displaying their path(s)
 
-upcoming features:
+### upcoming features:
 * better output
     * pretty text
         * colored text
