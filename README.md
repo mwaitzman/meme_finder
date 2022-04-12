@@ -6,8 +6,11 @@ MVP:
 upcoming features:
     * display preview of image in terminal if the terminal supports the Kitty Image Protocol
     * allow regex search
-    * allow synonym search
+    * allow case-sensitive search (currently hardcoded as case-insensitive)
+    * allow synonym search (maybe)
     * do as much in parallel as possible
     * terminate after a specified amount of matches (limit switch)
     * allow specifying file creation (and maybe modification) date filters
     * pretty text
+    * matched image display
+    * caching of resulting text in a hashmap with the file hash as a key, preserved between sessions for a major speedboost

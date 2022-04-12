@@ -6,11 +6,13 @@ version = "0.1.0"
 [dependencies]
 leptess = "0.13.2"
 rayon = "1.5.1"
-# clap = "3.1.8"
+# clap = "3.1.8" # maybe https://lib.rs/crates/arg-soup as an alternative, at least at first
 walkdir = "2.3.2"
 infer = "0.7.0"
 # num_cpus = "1.13.1"
 crossbeam = "0.8.1"
-
+# meowhash = "0.3.0"
+# https://lib.rs/crates/generic-pool potentially
+# potentially https://lib.rs/crates/fasthash
 [profile.release]
 lto = true
