@@ -1,7 +1,10 @@
 [package]
 edition = "2021"
 name = "meme_finder"
-version = "0.1.0"
+version = "0.1.1"
+authors = ["mwaitzman@outlook.com"]
+license = "AGPL-3.0"
+
 
 [dependencies]
 # for OCR
@@ -19,6 +22,7 @@ infer = "0.7.0"
 #meowhash = "0.3.0"
 #https://lib.rs/crates/generic-pool potentially
 #https://lib.rs/crates/fasthash potentially 
+
 
 [profile.release]
 #faster runtime speed, slower compilation
