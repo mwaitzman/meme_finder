@@ -9,3 +9,5 @@ upcoming features:
     * allow synonym search
     * do as much in parallel as possible
     * terminate after a specified amount of matches (limit switch)
+    * allow specifying file creation (and maybe modification) date filters
+    * pretty text

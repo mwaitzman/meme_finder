@@ -9,6 +9,8 @@ rayon = "1.5.1"
 # clap = "3.1.8"
 walkdir = "2.3.2"
 infer = "0.7.0"
+# num_cpus = "1.13.1"
+crossbeam = "0.8.1"
 
 [profile.release]
 lto = true
