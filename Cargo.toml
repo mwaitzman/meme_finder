@@ -4,15 +4,26 @@ name = "meme_finder"
 version = "0.1.0"
 
 [dependencies]
+# for OCR
 leptess = "0.13.2"
+# for parallelism
 rayon = "1.5.1"
-# clap = "3.1.8" # maybe https://lib.rs/crates/arg-soup as an alternative, at least at first
-walkdir = "2.3.2"
-infer = "0.7.0"
-# num_cpus = "1.13.1"
+# for parallelism
 crossbeam = "0.8.1"
-# meowhash = "0.3.0"
-# https://lib.rs/crates/generic-pool potentially
-# potentially https://lib.rs/crates/fasthash
+#clap = "3.1.8" # maybe https://lib.rs/crates/arg-soup as an alternative, at least at first
+# for recursive directory traversal
+walkdir = "2.3.2"
+# for detecting image files
+infer = "0.7.0"
+#num_cpus = "1.13.1"
+#meowhash = "0.3.0"
+#https://lib.rs/crates/generic-pool potentially
+#https://lib.rs/crates/fasthash potentially 
+
 [profile.release]
+#faster runtime speed, slower compilation
 lto = true
+#faster runtime speed at the cost of purely single-threaded compilation
+codegen-units = 1
+#WATCH: might cause problems down the line
+panic = "abort"
