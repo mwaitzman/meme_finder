@@ -1,4 +1,4 @@
-####usecase: 
+### usecase:
 you have a folder with a bunch (possibly hundreds or even thousands) of memes. You want to find a specific meme, but obviously don't want to spend an hour manually looking for it manually. That's where this program comes in! If you can remember any of the text written on the meme, you can input the folder's location along with the text you remember the meme has, and this program will search in the folder for the meme, printing out any images that contain that text!
 
 Usage:
