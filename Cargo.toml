@@ -1,7 +1,7 @@
 [package]
 edition = "2021"
 name = "meme_finder"
-version = "0.1.1"
+version = "0.2.1"
 authors = ["mwaitzman@outlook.com"]
 license = "AGPL-3.0"
 
@@ -13,7 +13,7 @@ leptess = "0.13.2"
 rayon = "1.5.1"
 # for parallelism
 crossbeam = "0.8.1"
-#clap = "3.1.8" # maybe https://lib.rs/crates/arg-soup as an alternative, at least at first
+clap = { version = "^3.1", features = ["cargo"]}
 # for recursive directory traversal
 walkdir = "2.3.2"
 # for detecting image files
@@ -22,12 +22,13 @@ infer = "0.7.0"
 #meowhash = "0.3.0"
 #https://lib.rs/crates/generic-pool potentially
 #https://lib.rs/crates/fasthash potentially 
-
+colored = "2"
+home-dir = "^0.1.0"
 
 [profile.release]
-#faster runtime speed, slower compilation
+# faster runtime speed, slower compilation
 lto = true
-#faster runtime speed at the cost of purely single-threaded compilation
+# faster runtime speed at the cost of purely single-threaded compilation
 codegen-units = 1
 #WATCH: might cause problems down the line
 panic = "abort"
