@@ -13,22 +13,32 @@ leptess = "0.13.2"
 rayon = "1.5.1"
 # for parallelism
 crossbeam = "0.8.1"
+# for command line argument handling
 clap = { version = "^3.1", features = ["cargo"]}
 # for recursive directory traversal
 walkdir = "2.3.2"
 # for detecting image files
 infer = "0.7.0"
-#num_cpus = "1.13.1"
-#meowhash = "0.3.0"
-#https://lib.rs/crates/generic-pool potentially
-#https://lib.rs/crates/fasthash potentially 
+# to easily make text colored (may very well be replaced by something more advanced later on)
 colored = "2"
+# for tilde expansion in paths
 home-dir = "^0.1.0"
+# fast concurrent hashmap for storing the image hashes and data with meowhasher
+dashmap = {version = "^5.2.0", features = ["rayon", "serde"]}
+# handles the (de)serialization
+serde = "1.0.136"
+# serialization file format
+ron = "0.7.0"
+# for finding the user's cache directory
+dirs = "4"
+# for hashing the images
+seahash = "4.1"
+
 
 [profile.release]
 # faster runtime speed, slower compilation
 lto = true
-# faster runtime speed at the cost of purely single-threaded compilation
+# (usually) faster runtime speed at the cost of purely single-threaded compilation or something
 codegen-units = 1
 #WATCH: might cause problems down the line
 panic = "abort"
