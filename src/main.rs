@@ -1,11 +1,13 @@
+#![feature(let_chains)]
 use clap::{crate_version, Arg, Command};
 use colored::*;
 use crossbeam::queue::ArrayQueue;
+use dashmap::DashMap;
 use home_dir::HomeDirExt;
 use infer;
 use leptess::LepTess;
 use rayon::prelude::*;
-use std::path::PathBuf;
+use std::{path::PathBuf, sync::Arc, fs::{File, self}};
 use walkdir::WalkDir;
 fn main() {
     //the arguments passed to the program
@@ -36,7 +38,7 @@ fn main() {
 
     let raw_dirs = matches
         .values_of("dirs")
-        .expect("no directories to search were specified!")
+        .expect("no directories to search through were specified!")
         .into_iter();
 
     // the folders we're gonna be searching in
@@ -60,7 +62,7 @@ fn main() {
     //TODO: allow optionally specifying text as regex instead of as a literal string
     let mut target_text = matches
         .value_of("target_text")
-        .expect("no target text specified!")
+        .expect(&"no target text specified!".red())
         .to_string();
     //for case-insensitive search
     //TODO: allow specifying the case sensitivity instead of hardcoding as insensitive
@@ -75,7 +77,8 @@ fn main() {
     //TODO: gate this stuff behind a `--verbose`/`-v` command line switch
     println!("starting directory traversal");
 
-    //(recursively) iterate through the specified directories, adding all image files to the list of files to search
+    // (recursively) iterate through the specified directories, adding all image files to the list of files to search
+    //NOTE: this iterator isn't parallelized because of unmet trait bounds, hence we're doing as little here as possible and doing the rest in a parallel iterator instead
     let mut files: Vec<Option<PathBuf>> = dirs
         .iter()
         .map(|dir| {
@@ -90,6 +93,7 @@ fn main() {
                 else if entry.path().is_symlink() {
                     let entry = std::fs::read_link(entry.path()).unwrap();
                     Some(entry)
+                // if it's a directory, don't add it, obviously
                 } else {
                     None
                 }
@@ -138,32 +142,57 @@ fn main() {
         //guaranteed to be safe because we're pushing exactly {ArrayQueue's length} times, to an originally empty queue
         //CHECK: is there actually a point to doing the `unwrap_unchecked` vs just not unwrapping at all?
         unsafe {
-            //CHECK: what's the point of the data_path parameter in `LepTess::new()`?
+            //CHECK: what's the point of the data_path parameter in `LepTess::new()`? - is it for non-bundled training data??
             readers
                 .push(LepTess::new(None, "eng").unwrap())
                 .unwrap_unchecked();
         }
     }
 
+    // try to load the cache file (may not exist)
+        let cache_file_path = match dirs::cache_dir() {
+            Some(mut path) => {
+                path.push("meme_finder/image_cache.ron");
+                path
+            }
+            None => PathBuf::from("/.cache/meme_finder/image_cache.ron"),
+        };
+
+        //NOTE: doesn't have to be mutable because of the library's design
+        let image_cache: Arc<DashMap<u64, String>>
+        = if let Ok(cache_file) = File::open(&cache_file_path)
+                && let Ok(deserialized_map) = ron::de::from_reader(cache_file) {
+                    Arc::new(deserialized_map)
+                }
+                else {
+                    Arc::new(DashMap::new())
+                };
+
     //iterate in parallel over each of the added files, searching each of them for a match
     println!("starting search...");
     files.par_iter().for_each(|file| {
-        //the OCR reader for this file
-        //SAFE: guaranteed to be an `Ok()`, because this  doesn't run until there's an item in the ArrayQueue, hence the returned value can't be none
-        let mut lt = unsafe { readers.pop().unwrap_unchecked() };
+        //check cache for this file
+            let file_contents = std::fs::read(&file).unwrap();
+            //CHECK: is the quality of this good enough? Should I really be using a 128 or higher bit hash?
+            let file_hash = seahash::hash(&file_contents);
 
-        //load the image file into the reader, and scan it
-        match lt.set_image(file) {
-            Ok(_) => {
-                let mut found_text = lt.get_utf8_text().unwrap_or("".to_string());
-                found_text.make_ascii_lowercase();
-                let found_text = found_text;
+            let mut found_text;
+
+            if let Some(content) = image_cache.get(&file_hash) {
+                found_text = content.value().to_owned();
+                //NOTE: dropping ASAP so as to not cause a deadlock, as the documentation warns can happen if the `get` function is called when holding a mutable reference into the map (although that might be only if there is already a reference to this SAME key (but it's best not to risk it just in case it doesn't just mean that))
+                drop(content);
+
+                //TODO: refactor to not have this code duplicated, maybe
+                // case-insensitive matching (default for now)
+                    found_text.make_ascii_lowercase();
+                    let found_text = found_text;
                 //TODO: match via regex instead if regex command line switch (TODO) is passed
                 if found_text.contains(&target_text) {
                     println!(
                         "found match in file {}",
                         file.as_path().to_str().unwrap().yellow()
-                    )
+                    );
                     //TODO: display image in the terminal if it supports the Kitty Image Protocol
                     /*
                     https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums
@@ -171,14 +200,59 @@ fn main() {
                     //TODO: check if match_limit (TODO) reached, terminate if so
                 }
             }
-            //TODO: check if the error type is something we care about; handle it if so
-            Err(_) => (),
-        }
-        //free up the reader for future use
-        //guaranteed to be safe because we're just putting it back in its spot
-        unsafe {
-            readers.push(lt).unwrap_unchecked();
-        }
+        // we evidently haven't cached the file, so let's OCR it
+            else {
+                //the OCR reader for this file
+                //SAFE: guaranteed to be an `Ok()`, because this  doesn't run until there's an item in the ArrayQueue, hence the returned value can't be none
+                let mut lt = unsafe { readers.pop().unwrap_unchecked() };
+
+                //load the image file into the reader, and scan it
+                    match lt.set_image(&file) {
+                        Ok(_) => {
+                            found_text = lt.get_utf8_text().unwrap_or("".to_string());
+
+                            //add file to cache
+                                let file_text = found_text.clone();
+                                image_cache.insert(file_hash, file_text);
+
+                            //case-insensitive matching (default for now)
+                                found_text.make_ascii_lowercase();
+                                //CHECK: is this "`unmut`'ing" actually zero-cost? I assume it is...
+                                let found_text = found_text;
+                            //TODO: match via regex instead if regex command line switch (TODO) is passed
+                            if found_text.contains(&target_text) {
+                                println!(
+                                    "found match in file {}",
+                                    file.as_path().to_str().unwrap().yellow()
+                                );
+                                //TODO: display image in the terminal if it supports the Kitty Image Protocol
+                                /*
+                                https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums
+                                */
+                                //TODO: check if match_limit (TODO) reached, terminate if so
+                            }
+                        }
+                        //TODO: check if the error type is something we care about; handle it if so
+                        Err(e) => println!(
+                            "WARNING: OCR could not read file ({path:#?}) due to error {e}",
+                            path = &file
+                        ),
+                    }
+                //free up the reader for future use
+                //guaranteed to be safe because we're just putting it back in its spot
+                unsafe {
+                    readers.push(lt).unwrap_unchecked();
+                }
+            }
     });
-    println!("search complete!");
+    //kinda stupid that I have to do it like this... Is there a better way?
+    println!("{}", "search complete!".green());
+
+    // write the cache to disk
+        //ensure that the folder that it's in exists first to prevent an error (panic, really)
+            let full_folder_path = &cache_file_path.parent().unwrap();
+            fs::create_dir_all(full_folder_path).unwrap();
+        let cache_file = File::create(&cache_file_path).expect("failed to create cache file!");
+        ron::ser::to_writer(cache_file, &*image_cache).expect("failed to create serializer");
+        println!("serialized cache to {:#?}", &cache_file_path)
 }
