@@ -42,7 +42,7 @@ viuer = "0.6" #CONSIDER: enabling the sixel feature at some point
 [profile.release]
 # faster runtime speed, slower compilation
 lto = true
-# (usually) faster runtime speed at the cost of purely single-threaded compilation or something
-codegen-units = 1
+# (usually) faster runtime speed at the cost of using a maximum of $(codegen-units) threads (number chosen so as to be able to use 7/8 cores on my CPU)
+codegen-units = 7
 #WATCH: might cause problems down the line
 panic = "abort"
