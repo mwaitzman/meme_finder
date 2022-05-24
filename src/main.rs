@@ -1,4 +1,4 @@
-#![feature(let_chains)]
+#![feature(let_chains, default_free_fn)]
 use clap::{crate_version, Arg, Command};
 use colored::*;
 use crossbeam::queue::ArrayQueue;
@@ -184,23 +184,10 @@ fn main() {
                     //NOTE: dropping ASAP so as to not cause a deadlock, as the documentation warns can happen if the `get` function is called when holding a mutable reference into the map (although that might be only if there is already a reference to this SAME key (but it's best not to risk it just in case it doesn't just mean that))
                     drop(content);
 
-                    //TODO: refactor to not have this code duplicated, maybe
-                    // case-insensitive matching (default for now)
-                        found_text.make_ascii_lowercase();
-                        let found_text = found_text;
-                    //TODO: match via regex instead if regex command line switch (TODO) is passed
-                    if found_text.contains(&target_text) {
-                        println!(
-                            "found match in file {}",
-                            file.as_path().to_str().unwrap().yellow()
-                        );
-
-                        //display the image in the terminal
-                            display_from_file(&file);
-                        //TODO: check if match_limit (TODO) reached, terminate if so
-                    }
+                    // check if the image contains the text we want and display it if so
+                    check_and_display_image(&mut found_text, &target_text, &file);
                 }
-            // we evidently haven't cached the file, so let's OCR it
+                // we evidently haven't cached the file, so let's OCR it
                 else {
                     //the OCR reader for this file
                     //SAFE: guaranteed to be an `Ok()`, because this  doesn't run until there's an item in the ArrayQueue, hence the returned value can't be none
@@ -211,25 +198,12 @@ fn main() {
                             Ok(_) => {
                                 found_text = lt.get_utf8_text().unwrap_or("".to_string());
 
-                                //add file to cache
+                                // add file to cache
                                     let file_text = found_text.clone();
                                     image_cache.insert(file_hash, file_text);
 
-                                //case-insensitive matching (default for now)
-                                    found_text.make_ascii_lowercase();
-                                    //CHECK: is this "`unmut`'ing" actually zero-cost? I assume it is...
-                                    let found_text = found_text;
-                                //TODO: match via regex instead if regex command line switch (TODO) is passed
-                                if found_text.contains(&target_text) {
-                                    println!(
-                                        "found match in file {}",
-                                        file.as_path().to_str().unwrap().yellow()
-                                    );
-
-                                    //display the image in the terminal
-                                        display_from_file(&file);
-                                    //TODO: check if match_limit (TODO) reached, terminate if so
-                                }
+                                    // check if the image contains the text we want and display it if so
+                                    check_and_display_image(&mut found_text, &target_text, &file);
                             }
                             //TODO: check if the error type is something we care about; handle it if so
                             Err(e) => println!(
@@ -256,9 +230,31 @@ fn main() {
         println!("serialized cache to {:#?}", &cache_file_path)
 }
 
+
 #[inline(always)]
-//display the image in the terminal, attempting to use either the Kitty Image Protocol or the iTerm protocol to do so.
-//TODO: allow configuration of this printing (e.g. only print if protocol supported, never print, print everything at end instead, print only using a specific protocol, etc.)
-fn display_from_file<P: AsRef<std::path::Path>>(file: P) {
-    viuer::print_from_file(&file, &viuer::Config::default()).expect("failed to display image file `{&file}`");
-}
+// checks if the image contains the text we want and displays it if so
+    //NOTE: function moved here to avoid duplicate code and the bugs that can happen from only updating in one spot
+    fn check_and_display_image<P: AsRef<std::path::Path>>(found_text: &mut String, target_text: &String, file: &P) {
+        // case-insensitive matching (default for now)
+            found_text.make_ascii_lowercase();
+            //CHECK: is this "`unmut`'ing" actually truly zero-cost? I assume it is...
+            let found_text = found_text;
+        //TODO: match via regex instead if regex command line switch (TODO) is passed
+
+        if found_text.contains(&*target_text) {
+            println!(
+                "found match in file {}",
+                file.as_ref().to_str().unwrap().yellow()
+            );
+
+            //display the image in the terminal, attempting to use either the Kitty Image Protocol or the iTerm protocol to do so.
+                //TODO: allow configuration of this printing (e.g. only print if protocol supported, never print, print everything at end instead, print only using a specific protocol, etc.)
+                viuer::print_from_file(&file, &viuer::Config {
+                    // stops the terminal from displaying the image over previous text (which without it, it'd do even over text from previous commands!)
+                    absolute_offset : false,
+                     ..std::default::default()
+                    } ).expect("failed to display image file `{&file}`");
+
+            //TODO: check if match_limit (TODO) reached, terminate if so
+        }
+    }
