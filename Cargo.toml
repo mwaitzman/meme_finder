@@ -23,7 +23,8 @@ infer = "0.7.0"
 colored = "2"
 # for tilde expansion in paths
 home-dir = "^0.1.0"
-# fast concurrent hashmap for storing the image hashes and data with meowhasher
+# fast concurrent hashmap for storing the image hashes and data
+#CHECK: is the rayon feature currently unused? disable if so
 dashmap = {version = "^5.2.0", features = ["rayon", "serde"]}
 # handles the (de)serialization
 serde = "1.0.136"
@@ -33,7 +34,10 @@ ron = "0.7.0"
 dirs = "4"
 # for hashing the images
 seahash = "4.1"
-
+# for logging
+#paris = {version = "1.5", features = ["timestamps", "macros", "no_logger"]}
+# for viewing the matching images in the terminal
+viuer = "0.6" #CONSIDER: enabling the sixel feature at some point
 
 [profile.release]
 # faster runtime speed, slower compilation

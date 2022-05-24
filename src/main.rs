@@ -11,30 +11,30 @@ use std::{path::PathBuf, sync::Arc, fs::{File, self}};
 use walkdir::WalkDir;
 fn main() {
     //the arguments passed to the program
-    let matches = Command::new("Meme Finder")
-        .author("mwaitzman, mwaitzman@outlook.com")
-        .version(crate_version!())
-        .about("Finds locally-saved memes via their meme text using OCR")
-        .arg(
-            Arg::new("folders to search")
-                .id("dirs")
-                .long("dir")
-                .alias("directory")
-                .short('d')
-                .takes_value(true)
-                .multiple_values(true)
-                .required(true),
-        )
-        .arg(
-            //TODO: remove this arg and just make the last argument passed to the program be the target text, but how?
-            Arg::new("text to search for")
-                .id("target_text")
-                .long("text")
-                .short('t')
-                .takes_value(true)
-                .required(true),
-        )
-        .get_matches();
+        let matches = Command::new("Meme Finder")
+            .author("mwaitzman, mwaitzman@outlook.com")
+            .version(crate_version!())
+            .about("Finds locally-saved memes via their meme text using OCR")
+            .arg(
+                Arg::new("folders to search")
+                    .id("dirs")
+                    .long("dir")
+                    .alias("directory")
+                    .short('d')
+                    .takes_value(true)
+                    .multiple_values(true)
+                    .required(true),
+            )
+            .arg(
+                //TODO: remove this arg and just make the last argument passed to the program be the target text, but how?
+                Arg::new("text to search for")
+                    .id("target_text")
+                    .long("text")
+                    .short('t')
+                    .takes_value(true)
+                    .required(true),
+            )
+            .get_matches();
 
     let raw_dirs = matches
         .values_of("dirs")
@@ -42,21 +42,22 @@ fn main() {
         .into_iter();
 
     // the folders we're gonna be searching in
-    let dirs;
-    // The `home-dir` crate doesn't support Windows currently, so we only use it on the Unix target. TODO: write (and submit to upstream) a patch to add Windows support
-    #[cfg(target_family = "unix")]
-    {
-        dirs = raw_dirs
-            .map(|path| match path.expand_home() {
-                Ok(expanded_path) => expanded_path,
-                Err(_) => PathBuf::from(path),
-            })
-            .collect::<Vec<_>>();
-    }
-    #[cfg(not(target_family = "unix"))]
-    {
-        dirs = raw_dirs.collect::<Vec<_>>();
-    }
+        let dirs;
+    // expand directory paths in the input if we can
+    //NOTE: The `home-dir` crate doesn't support Windows currently, so we only use it on a Unix target
+        #[cfg(target_family = "unix")]
+        {
+            dirs = raw_dirs
+                .map(|path| match path.expand_home() {
+                    Ok(expanded_path) => expanded_path,
+                    Err(_) => PathBuf::from(path),
+                })
+                .collect::<Vec<_>>();
+        }
+        #[cfg(not(target_family = "unix"))]
+        {
+            dirs = raw_dirs.collect::<Vec<_>>();
+        }
 
     //the text we're searching for
     //TODO: allow optionally specifying text as regex instead of as a literal string
@@ -66,12 +67,9 @@ fn main() {
         .to_string();
     //for case-insensitive search
     //TODO: allow specifying the case sensitivity instead of hardcoding as insensitive
-    target_text.make_ascii_lowercase();
-    let target_text = target_text;
+        target_text.make_ascii_lowercase();
+        let target_text = target_text;
 
-    //all files (and files from symlinks) found in the folder
-    //NOTE: the chosen initial capacity is assuming that the directories chosen contain about 64 images, and hence this'll avoid the initial allocations (0, 4, 8, 16, 32, 64), while still being small enough that in the event of there being less, it won't really matter because it's not wasting much space. However, this number basically came out of my ass - it has no real data backing it up at the moment
-    // let mut files = Vec::with_capacity(64);
 
     //TODO: use something better than raw `println!()`-ing (e.g. a proper logging crate), or at least use colors and descriptors tags/whatever the "[info]", "[warning]", etc. that CLIs typically print is called.
     //TODO: gate this stuff behind a `--verbose`/`-v` command line switch
@@ -133,118 +131,120 @@ fn main() {
     );
 
     //the number of threads/CPU cores the program'll be parallelized across
-    let thread_count = rayon::current_num_threads();
-    println!("using {thread_count} threads");
+        let thread_count = rayon::current_num_threads();
+        println!("using {thread_count} threads");
 
     //the pool of OCR reader structs; one per thread
-    let readers = ArrayQueue::new(thread_count);
-    for _ in 0..thread_count {
-        //guaranteed to be safe because we're pushing exactly {ArrayQueue's length} times, to an originally empty queue
-        //CHECK: is there actually a point to doing the `unwrap_unchecked` vs just not unwrapping at all?
-        unsafe {
-            //CHECK: what's the point of the data_path parameter in `LepTess::new()`? - is it for non-bundled training data??
-            readers
-                .push(LepTess::new(None, "eng").unwrap())
-                .unwrap_unchecked();
+        let readers = ArrayQueue::new(thread_count);
+    // populate the reader pool
+        for _ in 0..thread_count {
+            //guaranteed to be safe because we're pushing exactly {ArrayQueue's length} times, to an originally empty queue
+            //CHECK: is there actually a point to doing the `unwrap_unchecked` vs just not unwrapping at all?
+            unsafe {
+                //CHECK: what's the point of the data_path parameter in `LepTess::new()`? - is it for non-bundled training data??
+                readers
+                    .push(LepTess::new(None, "eng").unwrap())
+                    .unwrap_unchecked();
+            }
         }
-    }
 
     // try to load the cache file (may not exist)
-        let cache_file_path = match dirs::cache_dir() {
-            Some(mut path) => {
-                path.push("meme_finder/image_cache.ron");
-                path
-            }
-            None => PathBuf::from("/.cache/meme_finder/image_cache.ron"),
-        };
-
-        //NOTE: doesn't have to be mutable because of the library's design
-        let image_cache: Arc<DashMap<u64, String>>
-        = if let Ok(cache_file) = File::open(&cache_file_path)
-                && let Ok(deserialized_map) = ron::de::from_reader(cache_file) {
-                    Arc::new(deserialized_map)
+        //attempt to load from the user's OS-assigned cache dir. If the OS doesn't assign it, just look in the root directory for it.
+            let cache_file_path = match dirs::cache_dir() {
+                Some(mut path) => {
+                    path.push("meme_finder/image_cache.ron");
+                    path
                 }
-                else {
-                    Arc::new(DashMap::new())
-                };
+                None => PathBuf::from("/.cache/meme_finder/image_cache.ron"),
+            };
+
+        // If we can successfully deserialize the cache file from the given file, great, we'll use that as the cache. Otherwise, just use an empty cache
+            //NOTE: `image_cache` doesn't have to be mutable because of the library's design
+                let image_cache: Arc<DashMap<u64, String>>
+                = if let Ok(cache_file) = File::open(&cache_file_path)
+                        && let Ok(deserialized_map) = ron::de::from_reader(cache_file) {
+                            Arc::new(deserialized_map)
+                        }
+                        else {
+                            Arc::new(DashMap::new())
+                        };
 
     //iterate in parallel over each of the added files, searching each of them for a match
-    println!("starting search...");
-    files.par_iter().for_each(|file| {
-        //check cache for this file
-            let file_contents = std::fs::read(&file).unwrap();
-            //CHECK: is the quality of this good enough? Should I really be using a 128 or higher bit hash?
-            let file_hash = seahash::hash(&file_contents);
+        println!("starting search...");
+        files.par_iter().for_each(|file| {
+            //check cache for this file
+                let file_contents = std::fs::read(&file).unwrap();
+                //CHECK: is the quality of this good enough? Should I really be using a 128 or higher bit hash?
+                let file_hash = seahash::hash(&file_contents);
 
-            let mut found_text;
+                let mut found_text;
 
-            if let Some(content) = image_cache.get(&file_hash) {
-                found_text = content.value().to_owned();
-                //NOTE: dropping ASAP so as to not cause a deadlock, as the documentation warns can happen if the `get` function is called when holding a mutable reference into the map (although that might be only if there is already a reference to this SAME key (but it's best not to risk it just in case it doesn't just mean that))
-                drop(content);
+                if let Some(content) = image_cache.get(&file_hash) {
+                    found_text = content.value().to_owned();
+                    //NOTE: dropping ASAP so as to not cause a deadlock, as the documentation warns can happen if the `get` function is called when holding a mutable reference into the map (although that might be only if there is already a reference to this SAME key (but it's best not to risk it just in case it doesn't just mean that))
+                    drop(content);
 
-                //TODO: refactor to not have this code duplicated, maybe
-                // case-insensitive matching (default for now)
-                    found_text.make_ascii_lowercase();
-                    let found_text = found_text;
-                //TODO: match via regex instead if regex command line switch (TODO) is passed
-                if found_text.contains(&target_text) {
-                    println!(
-                        "found match in file {}",
-                        file.as_path().to_str().unwrap().yellow()
-                    );
-                    //TODO: display image in the terminal if it supports the Kitty Image Protocol
-                    /*
-                    https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums
-                    */
-                    //TODO: check if match_limit (TODO) reached, terminate if so
-                }
-            }
-        // we evidently haven't cached the file, so let's OCR it
-            else {
-                //the OCR reader for this file
-                //SAFE: guaranteed to be an `Ok()`, because this  doesn't run until there's an item in the ArrayQueue, hence the returned value can't be none
-                let mut lt = unsafe { readers.pop().unwrap_unchecked() };
-
-                //load the image file into the reader, and scan it
-                    match lt.set_image(&file) {
-                        Ok(_) => {
-                            found_text = lt.get_utf8_text().unwrap_or("".to_string());
-
-                            //add file to cache
-                                let file_text = found_text.clone();
-                                image_cache.insert(file_hash, file_text);
-
-                            //case-insensitive matching (default for now)
-                                found_text.make_ascii_lowercase();
-                                //CHECK: is this "`unmut`'ing" actually zero-cost? I assume it is...
-                                let found_text = found_text;
-                            //TODO: match via regex instead if regex command line switch (TODO) is passed
-                            if found_text.contains(&target_text) {
-                                println!(
-                                    "found match in file {}",
-                                    file.as_path().to_str().unwrap().yellow()
-                                );
-                                //TODO: display image in the terminal if it supports the Kitty Image Protocol
-                                /*
-                                https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums
-                                */
-                                //TODO: check if match_limit (TODO) reached, terminate if so
-                            }
-                        }
-                        //TODO: check if the error type is something we care about; handle it if so
-                        Err(e) => println!(
-                            "WARNING: OCR could not read file ({path:#?}) due to error {e}",
-                            path = &file
-                        ),
+                    //TODO: refactor to not have this code duplicated, maybe
+                    // case-insensitive matching (default for now)
+                        found_text.make_ascii_lowercase();
+                        let found_text = found_text;
+                    //TODO: match via regex instead if regex command line switch (TODO) is passed
+                    if found_text.contains(&target_text) {
+                        println!(
+                            "found match in file {}",
+                            file.as_path().to_str().unwrap().yellow()
+                        );
+                        //display the image in the terminal, attempting to use either the Kitty Image Protocol or the iTerm protocol to do so.
+                            //TODO: allow configuration of this printing (e.g. only print if protocol supported, never print, print everything at end instead, print only using a specific protocol, etc.)
+                            viuer::print_from_file(&file, &viuer::Config::default()).expect("failed to display image file `{&file}`");
+                        //TODO: check if match_limit (TODO) reached, terminate if so
                     }
-                //free up the reader for future use
-                //guaranteed to be safe because we're just putting it back in its spot
-                unsafe {
-                    readers.push(lt).unwrap_unchecked();
                 }
-            }
-    });
+            // we evidently haven't cached the file, so let's OCR it
+                else {
+                    //the OCR reader for this file
+                    //SAFE: guaranteed to be an `Ok()`, because this  doesn't run until there's an item in the ArrayQueue, hence the returned value can't be none
+                    let mut lt = unsafe { readers.pop().unwrap_unchecked() };
+
+                    //load the image file into the reader, and scan it
+                        match lt.set_image(&file) {
+                            Ok(_) => {
+                                found_text = lt.get_utf8_text().unwrap_or("".to_string());
+
+                                //add file to cache
+                                    let file_text = found_text.clone();
+                                    image_cache.insert(file_hash, file_text);
+
+                                //case-insensitive matching (default for now)
+                                    found_text.make_ascii_lowercase();
+                                    //CHECK: is this "`unmut`'ing" actually zero-cost? I assume it is...
+                                    let found_text = found_text;
+                                //TODO: match via regex instead if regex command line switch (TODO) is passed
+                                if found_text.contains(&target_text) {
+                                    println!(
+                                        "found match in file {}",
+                                        file.as_path().to_str().unwrap().yellow()
+                                    );
+                                    //TODO: display image in the terminal if it supports the Kitty Image Protocol
+                                    /*
+                                    https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums
+                                    */
+                                    //TODO: check if match_limit (TODO) reached, terminate if so
+                                }
+                            }
+                            //TODO: check if the error type is something we care about; handle it if so
+                            Err(e) => println!(
+                                "WARNING: OCR could not read file ({path:#?}) due to error {e}",
+                                path = &file
+                            ),
+                        }
+                    //free up the reader for future use
+                    //SAFE: guaranteed to be safe because we're just putting it back in its spot
+                    unsafe {
+                        readers.push(lt).unwrap_unchecked();
+                    }
+                }
+        });
     //kinda stupid that I have to do it like this... Is there a better way?
     println!("{}", "search complete!".green());
 
