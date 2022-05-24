@@ -194,9 +194,9 @@ fn main() {
                             "found match in file {}",
                             file.as_path().to_str().unwrap().yellow()
                         );
-                        //display the image in the terminal, attempting to use either the Kitty Image Protocol or the iTerm protocol to do so.
-                            //TODO: allow configuration of this printing (e.g. only print if protocol supported, never print, print everything at end instead, print only using a specific protocol, etc.)
-                            viuer::print_from_file(&file, &viuer::Config::default()).expect("failed to display image file `{&file}`");
+
+                        //display the image in the terminal
+                            display_from_file(&file);
                         //TODO: check if match_limit (TODO) reached, terminate if so
                     }
                 }
@@ -225,10 +225,9 @@ fn main() {
                                         "found match in file {}",
                                         file.as_path().to_str().unwrap().yellow()
                                     );
-                                    //TODO: display image in the terminal if it supports the Kitty Image Protocol
-                                    /*
-                                    https://sw.kovidgoyal.net/kitty/graphics-protocol/#querying-support-and-available-transmission-mediums
-                                    */
+
+                                    //display the image in the terminal
+                                        display_from_file(&file);
                                     //TODO: check if match_limit (TODO) reached, terminate if so
                                 }
                             }
@@ -255,4 +254,11 @@ fn main() {
         let cache_file = File::create(&cache_file_path).expect("failed to create cache file!");
         ron::ser::to_writer(cache_file, &*image_cache).expect("failed to create serializer");
         println!("serialized cache to {:#?}", &cache_file_path)
+}
+
+#[inline(always)]
+//display the image in the terminal, attempting to use either the Kitty Image Protocol or the iTerm protocol to do so.
+//TODO: allow configuration of this printing (e.g. only print if protocol supported, never print, print everything at end instead, print only using a specific protocol, etc.)
+fn display_from_file<P: AsRef<std::path::Path>>(file: P) {
+    viuer::print_from_file(&file, &viuer::Config::default()).expect("failed to display image file `{&file}`");
 }
